@@ -1,0 +1,24 @@
+body.site-bsky .action-button {
+    width: 33px;
+    height: 33px;
+}
+
+body.site-bsky.theme-light .action-button {
+    background-color: #1083fe;
+    color: #f1f3f5;
+}
+
+body.site-bsky.theme-light .action-button:hover {
+    background-color: #3496fe;
+}
+
+body.site-bsky.theme-dim .action-button,
+body.site-bsky.theme-dark .action-button {
+    background-color: #1083fe;
+    color: #f1f3f5;
+}
+
+body.site-bsky.theme-dim .action-button:hover,
+body.site-bsky.theme-dark .action-button:hover {
+    background-color: #3496fe;
+}

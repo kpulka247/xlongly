@@ -1,0 +1,89 @@
+#char-counter {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #ffffff;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    z-index: 10000;
+}
+
+#button-container {
+    position: absolute;
+    display: flex;
+    gap: 10px;
+    z-index: 0;
+}
+
+.action-button {
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+/* LIGHT PAGE THEME -> DARK BUTTONS */
+body.theme-light .action-button {
+    background-color: #0f1419;
+    color: #ffffff;
+}
+
+body.theme-light .action-button:hover {
+    background-color: #272c30;
+}
+
+body.theme-light .action-button:active {
+    background-color: #3a3f44;
+}
+
+/* DARK PAGE THEME -> LIGHT BUTTONS */
+body.theme-dim .action-button,
+body.theme-dark .action-button {
+    background-color: #eff3f4;
+    color: #0f1419;
+}
+
+body.theme-dim .action-button:hover,
+body.theme-dark .action-button:hover {
+    background-color: #d7dbdc;
+}
+
+body.theme-dim .action-button:active,
+body.theme-dark .action-button:active {
+    background-color: #c0c5c8;
+}
+
+#action-notification {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    background-color: #28a745;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+    pointer-events: none;
+    transform: translateY(20px);
+    min-width: 180px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+#action-notification.notification-show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+#action-notification.notification-warning {
+    background-color: #ffc107;
+    color: #212529;
+}

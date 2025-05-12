@@ -1,0 +1,9 @@
+body.x-active #button-container {
+
+    z-index: 1000;
+}
+
+body.site-x .action-button {
+    width: 36px;
+    height: 36px;
+}
