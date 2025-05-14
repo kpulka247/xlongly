@@ -1,8 +1,9 @@
 import { SiteConfiguration } from '../config-types';
 
 export const bskySiteConfig: SiteConfiguration = {
-    targetSelector: 'div[contenteditable="true"][role="textbox"] p',
+    targetSelector: 'div[contenteditable="true"][role="textbox"]',
     buttonAnchorSelector: 'div button[aria-label="Publish post"], div button[aria-label="Publish reply"]',
+    excludeUiIfSelectorVisible: 'div[role="progressbar"]',
     buttonPosition: {
         topOffset: 0,
         gapToAnchorLeft: 10,

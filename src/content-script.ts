@@ -19,6 +19,7 @@ import './styles/sites/x.css';
 
 const iconShowImage: string = `<svg viewBox="0 0 24 24" fill="currentColor" width="18px" height="18px" style="display: block; margin: auto;"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>`;
 const iconConvertToImage: string = `<svg viewBox="0 0 24 24" fill="currentColor" width="18px" height="18px" style="display: block; margin: auto;"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
+const iconCopy: string = `<svg viewBox="0 0 24 24" fill="currentColor" width="18px" height="18px" style="display: block; margin: auto;"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>`;
 
 function updateButtonContainerPosition(): void {
     const positionRelativeToElement = buttonAnchorElement || targetField;
@@ -111,8 +112,16 @@ function setupUIForTarget(textInputElement: TargetElementType): void {
 
     generateReplaceButtonElement = document.createElement('button');
     generateReplaceButtonElement.className = 'action-button';
-    generateReplaceButtonElement.title = 'Convert to image';
-    generateReplaceButtonElement.innerHTML = iconConvertToImage;
+
+    const isOnBluesky = window.location.hostname.includes('bsky.app');
+    if (isOnBluesky) {
+        generateReplaceButtonElement.title = 'Copy text as image (Ctrl+V to paste)';
+        generateReplaceButtonElement.innerHTML = iconCopy;
+    } else {
+        generateReplaceButtonElement.title = 'Convert text to image and replace';
+        generateReplaceButtonElement.innerHTML = iconConvertToImage;
+    }
+
     buttonContainerElement.appendChild(generateReplaceButtonElement);
     generateReplaceButtonElement.addEventListener('click', () => processImageAction('replaceInField'));
 
@@ -179,6 +188,24 @@ function tryFindAndSetupTarget(): void {
 
     const targetSelectorFromConfig = activeConfig.targetSelector;
     const anchorSelectorFromConfig = activeConfig.buttonAnchorSelector;
+    const excludeSelector = activeConfig.excludeUiIfSelectorVisible;
+
+    if (excludeSelector) {
+        const excludingElement = document.querySelector(excludeSelector) as HTMLElement | null;
+        if (excludingElement) {
+            const style = window.getComputedStyle(excludingElement);
+            const isExcludingElementVisible = style.display !== 'none' && style.visibility !== 'hidden' && excludingElement.offsetParent !== null;
+            if (isExcludingElementVisible) {
+                console.log(`[xLongly] The UI exclusion element is visible (${excludeSelector}). Hiding UI.`);
+                if (targetField || buttonAnchorElement) {
+                    cleanupFullUIAndListeners();
+                }
+                buttonAnchorElement = null;
+                targetField = null;
+                return;
+            }
+        }
+    }
 
     if (!targetSelectorFromConfig) {
         console.log('[xLongly] tryFindAndSetupTarget: No targetSelector in active config.');
@@ -195,7 +222,7 @@ function tryFindAndSetupTarget(): void {
     if (anchorSelectorFromConfig) {
         newButtonAnchorElement = document.querySelector(anchorSelectorFromConfig) as HTMLElement | null;
         if (!newButtonAnchorElement) {
-            console.debug(`[xLongly] buttonAnchorSelector not found: ${anchorSelectorFromConfig}. The buttons will be next to the text box.`);
+            console.debug(`[xLongly] buttonAnchorSelector not found: ${anchorSelectorFromConfig}. Buttons will be next to the text field.`);
         }
     }
     buttonAnchorElement = newButtonAnchorElement || (textInputElement as HTMLElement | null);
@@ -210,26 +237,31 @@ function tryFindAndSetupTarget(): void {
             isAnchorVisible = anchorStyle.display !== 'none' && anchorStyle.visibility !== 'hidden' && buttonAnchorElement.offsetParent !== null;
         }
 
-
         if (isTextInputVisible && isAnchorVisible) {
-            if (targetField !== textInputElement || (newButtonAnchorElement && buttonAnchorElement !== newButtonAnchorElement) || !buttonContainerElement || !document.body.contains(buttonContainerElement)) {
-                console.log('[xLongly] tryFindAndSetupTarget: Visible elements found, configuring/reconfiguring the UI.');
+            const uiAlreadyExistsForCurrentElements =
+                targetField === textInputElement &&
+                buttonAnchorElement === (newButtonAnchorElement || textInputElement) &&
+                buttonContainerElement &&
+                document.body.contains(buttonContainerElement);
+
+
+            if (!uiAlreadyExistsForCurrentElements) {
+                console.log('[xLongly] tryFindAndSetupTarget: Visible elements found or changed, configuring/reconfiguring UI.');
                 setupUIForTarget(textInputElement);
             } else {
                 updateButtonContainerPosition();
             }
         } else {
             console.log('[xLongly] tryFindAndSetupTarget: Text field or anchor not visible.');
-            if (targetField === textInputElement || (buttonAnchorElement && buttonAnchorElement === (newButtonAnchorElement || textInputElement))) {
+            if (targetField === textInputElement ||
+                (buttonAnchorElement && buttonAnchorElement === (newButtonAnchorElement || textInputElement))) {
                 cleanupFullUIAndListeners();
-                buttonAnchorElement = null;
             }
         }
     } else {
         console.log('[xLongly] tryFindAndSetupTarget: Text field (targetSelector) not found.');
         if (targetField || buttonAnchorElement) {
             cleanupFullUIAndListeners();
-            buttonAnchorElement = null;
         }
     }
 }
@@ -291,7 +323,8 @@ function initializePlugin(): void {
         tryFindAndSetupTarget();
     });
 
-    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: false });
+    const targetNode = document.querySelector('#main') || document.body;
+    observer.observe(targetNode, { childList: true, subtree: true });
     console.log('[xLongly] MutationObserver started.');
 }
 
@@ -424,22 +457,44 @@ async function processImageAction(actionType: 'openInNewTab' | 'replaceInField')
                 setTimeout(() => URL.revokeObjectURL(blobUrl), 1500); showActionNotification('Image opened', 'success');
             }
         } else if (actionType === 'replaceInField') {
+            const isOnBluesky = window.location.hostname.includes('bsky.app');
+
             deleteContentNatively(targetField);
             await new Promise(resolve => setTimeout(resolve, 50));
-            if (targetField && targetField.isContentEditable) {
-                try {
-                    const dataTransfer = new DataTransfer(); dataTransfer.items.add(new File([blob], "gen.png", { type: blob.type }));
-                    targetField.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dataTransfer, bubbles: true, cancelable: true }));
-                    showActionNotification('Text replaced', 'success');
-                    setTimeout(() => { if (targetField) targetField.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); }, 150);
-                } catch (e) {
-                    console.error('[xLongly] Paste sim error:', e); const blobUrl = URL.createObjectURL(blob); const img = document.createElement('img');
-                    img.src = blobUrl; if (targetField) targetField.appendChild(img);
-                    setTimeout(() => URL.revokeObjectURL(blobUrl), 500);
-                    if (targetField) targetField.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); showActionNotification('Image inserted (fallback)', 'success');
+
+            if (isOnBluesky) {
+                if (targetField) {
+                    try {
+                        const item = new ClipboardItem({ "image/png": blob });
+                        await navigator.clipboard.write([item]);
+                        showActionNotification('Image copied! Use Ctrl+V to paste.', 'success');
+                    } catch (copyError) {
+                        console.error('[xLongly] Error copying image to clipboard on Bluesky:', copyError);
+                        showActionNotification('Error copying image. Please try again.', 'warning');
+                    }
+                } else {
+                    showActionNotification('Error: Target field not found for copying.', 'warning');
                 }
-            } else if (targetField && (targetField instanceof HTMLInputElement || targetField instanceof HTMLTextAreaElement)) {
-                const item = new ClipboardItem({ "image/png": blob }); await navigator.clipboard.write([item]); showActionNotification('Copied (Ctrl+V)', 'warning');
+            } else {
+                if (targetField && targetField.isContentEditable) {
+                    try {
+                        const dataTransfer = new DataTransfer(); dataTransfer.items.add(new File([blob], "gen.png", { type: blob.type }));
+                        targetField.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dataTransfer, bubbles: true, cancelable: true }));
+                        showActionNotification('Text replaced with image', 'success');
+                        setTimeout(() => {
+                            if (targetField) {
+                                targetField.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                            }
+                        }, 150);
+                    } catch (e) {
+                        console.error('[xLongly] Paste sim error (non-Bluesky):', e); const blobUrl = URL.createObjectURL(blob); const img = document.createElement('img');
+                        img.src = blobUrl; if (targetField) targetField.appendChild(img);
+                        setTimeout(() => URL.revokeObjectURL(blobUrl), 500);
+                        if (targetField) targetField.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); showActionNotification('Image inserted (fallback)', 'success');
+                    }
+                } else if (targetField && (targetField instanceof HTMLInputElement || targetField instanceof HTMLTextAreaElement)) {
+                    const item = new ClipboardItem({ "image/png": blob }); await navigator.clipboard.write([item]); showActionNotification('Copied (Ctrl+V to paste)', 'warning');
+                }
             }
         }
     } catch (error) {

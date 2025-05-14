@@ -20,4 +20,5 @@ export interface SiteConfiguration {
     buttonAnchorSelector?: string;
     buttonPosition: ButtonPositionConfig;
     canvasStyle: CanvasStyleConfig;
+    excludeUiIfSelectorVisible?: string;
 }
