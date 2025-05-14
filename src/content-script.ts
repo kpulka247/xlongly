@@ -467,7 +467,7 @@ async function processImageAction(actionType: 'openInNewTab' | 'replaceInField')
                     try {
                         const item = new ClipboardItem({ "image/png": blob });
                         await navigator.clipboard.write([item]);
-                        showActionNotification('Image copied! Use Ctrl+V to paste.', 'success');
+                        showActionNotification('Image copied (Ctrl+V to paste)', 'success');
                     } catch (copyError) {
                         console.error('[xLongly] Error copying image to clipboard on Bluesky:', copyError);
                         showActionNotification('Error copying image. Please try again.', 'warning');
@@ -493,7 +493,7 @@ async function processImageAction(actionType: 'openInNewTab' | 'replaceInField')
                         if (targetField) targetField.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); showActionNotification('Image inserted (fallback)', 'success');
                     }
                 } else if (targetField && (targetField instanceof HTMLInputElement || targetField instanceof HTMLTextAreaElement)) {
-                    const item = new ClipboardItem({ "image/png": blob }); await navigator.clipboard.write([item]); showActionNotification('Copied (Ctrl+V to paste)', 'warning');
+                    const item = new ClipboardItem({ "image/png": blob }); await navigator.clipboard.write([item]); showActionNotification('Image copied (Ctrl+V to paste)', 'warning');
                 }
             }
         }

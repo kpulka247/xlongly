@@ -62,28 +62,43 @@ body.theme-dark .action-button:active {
 
 #action-notification {
     position: fixed;
-    bottom: 10px;
-    left: 10px;
-    background-color: #28a745;
-    color: white;
-    padding: 10px 15px;
-    border-radius: 5px;
-    z-index: 10000;
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
-    pointer-events: none;
-    transform: translateY(20px);
-    min-width: 180px;
-    box-sizing: border-box;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+
+    padding: 12px 16px;
+    border-radius: 8px;
+
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1),
+        0px 4px 6px rgba(0, 0, 0, 0.1);
+
+    font-family: "TwitterChirp", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 20px;
+
+    min-width: 200px;
+    max-width: 400px;
     text-align: center;
+
+    z-index: 200000;
+
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) translateY(20px);
+    transition: opacity 0.25s cubic-bezier(0, 0, 0, 1),
+        visibility 0.25s cubic-bezier(0, 0, 0, 1),
+        transform 0.25s cubic-bezier(0, 0, 0, 1);
+    pointer-events: none;
 }
 
 #action-notification.notification-show {
     opacity: 1;
-    transform: translateY(0);
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
 }
 
 #action-notification.notification-warning {
-    background-color: #ffc107;
-    color: #212529;
+    background-color: rgb(255, 212, 0);
+    color: rgb(15, 20, 25);
 }

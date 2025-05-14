@@ -3,6 +3,11 @@ body.site-bsky .action-button {
     height: 33px;
 }
 
+body.site-bsky #action-notification {
+    background-color: #1083fe;
+    color: #f1f3f5;
+}
+
 body.site-bsky.theme-light .action-button {
     background-color: #1083fe;
     color: #f1f3f5;
