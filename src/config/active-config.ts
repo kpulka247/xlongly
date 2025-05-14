@@ -1,6 +1,6 @@
 import { SiteConfiguration } from './config-types';
-import { xSiteConfig } from './x';
-import { bskySiteConfig } from './bsky';
+import { xSiteConfig } from './sites/x';
+import { bskySiteConfig } from './sites/bsky';
 
 const siteConfigs: { [hostnamePattern: string]: SiteConfiguration } = {
     "x.com": xSiteConfig,

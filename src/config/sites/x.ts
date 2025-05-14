@@ -1,4 +1,4 @@
-import { SiteConfiguration } from './config-types';
+import { SiteConfiguration } from '../config-types';
 
 export const xSiteConfig: SiteConfiguration = {
     targetSelector: 'div[data-testid="tweetTextarea_0"]',

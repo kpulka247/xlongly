@@ -1,4 +1,4 @@
-import { SiteConfiguration } from './config-types';
+import { SiteConfiguration } from '../config-types';
 
 export const bskySiteConfig: SiteConfiguration = {
     targetSelector: 'div[contenteditable="true"][role="textbox"] p',
