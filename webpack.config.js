@@ -1,9 +1,9 @@
 const path = require('path');
 const CopyPlugin = require('copy-webpack-plugin');
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
-const MiniCssExtractPlugin = require('mini-css-extract-plugin'); // Zaimportuj nowy plugin
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const ZipPlugin = require('zip-webpack-plugin');
-const webpack = require('webpack'); // Potrzebne do DefinePlugin
+const webpack = require('webpack');
 
 // --- Help function for specific target creation ---
 const createConfig = (browser, mode) => {
@@ -15,6 +15,7 @@ const createConfig = (browser, mode) => {
         devtool: isDevelopment ? 'inline-source-map' : false,
         entry: {
             'content-script': './src/content-script.ts',
+            'popup': './src/popup/popup.ts',
         },
         output: {
             path: browserOutputDir,
@@ -59,7 +60,12 @@ const createConfig = (browser, mode) => {
                 'process.env.NODE_ENV': JSON.stringify(mode)
             }),
             new MiniCssExtractPlugin({
-                filename: 'styles/main.css',
+                filename: (pathData) => {
+                    if (pathData.chunk.name === 'content-script') {
+                        return 'styles/main.css';
+                    }
+                    return 'styles/[name].css';
+                },
                 chunkFilename: 'styles/[id].css',
             }),
             new CopyPlugin({
@@ -69,6 +75,10 @@ const createConfig = (browser, mode) => {
                         to: 'manifest.json',
                     },
                     { from: 'public/icons', to: 'icons', noErrorOnMissing: true },
+                    {
+                        from: 'src/popup/popup.html',
+                        to: 'popup.html',
+                    },
                 ],
             }),
             !isDevelopment && new ZipPlugin({

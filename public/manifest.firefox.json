@@ -3,6 +3,10 @@
     "name": "xLongly",
     "version": "0.0.0",
     "description": "Converts written posts on X and Bluesky that exceed the character limit into images with text.",
+    "permissions": [
+        "storage",
+        "tabs"
+    ],
     "content_scripts": [
         {
             "matches": [
@@ -24,7 +28,9 @@
             "16": "icons/icon16.png",
             "48": "icons/icon48.png",
             "128": "icons/icon128.png"
-        }
+        },
+        "default_title": "xLongly Settings",
+        "default_popup": "popup.html"
     },
     "icons": {
         "16": "icons/icon16.png",

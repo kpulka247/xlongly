@@ -1,0 +1,121 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    background-color: #f4f4f4;
+    width: 350px;
+    padding-bottom: 10px;
+}
+
+.container {
+    padding: 15px;
+}
+
+h1 {
+    font-size: 1.2em;
+    color: #333;
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+.settings-section {
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #fff;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.settings-section h2 {
+    font-size: 1em;
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #555;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+    color: #444;
+}
+
+select,
+input[type="color"] {
+    width: calc(100% - 12px);
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+input[type="color"] {
+    height: 35px;
+    padding: 2px;
+}
+
+
+.color-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.color-box {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+
+.color-box:hover {
+    transform: scale(1.1);
+}
+
+.color-box.selected {
+    border-width: 2px;
+    border-color: #007bff;
+}
+
+
+button {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    margin-right: 10px;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+button#reset-button {
+    background-color: #6c757d;
+}
+
+button#reset-button:hover {
+    background-color: #545b62;
+}
+
+
+#status-message {
+    margin-top: 15px;
+    font-size: 0.85em;
+    text-align: center;
+}
+
+#status-message.success {
+    color: green;
+}
+
+#status-message.error {
+    color: red;
+}

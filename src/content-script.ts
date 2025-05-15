@@ -1,4 +1,5 @@
-import activeConfig from './config/active-config';
+import { initializeActiveConfig, getActiveConfig } from './config/active-config';
+import type { SiteConfiguration } from './config/config-types';
 import { initializeThemeManager, cleanupThemeManager } from './utils/theme';
 import { iconShowImage, iconConvertToImage, iconCopy } from './constants/icons';
 import { isElementVisible } from './utils/dom';
@@ -16,6 +17,7 @@ let buttonContainerElement: HTMLDivElement | null = null;
 let generateOpenButtonElement: HTMLButtonElement | null = null;
 let generateReplaceButtonElement: HTMLButtonElement | null = null;
 let actionNotificationElement: HTMLDivElement | null = null;
+let currentActiveConfig: SiteConfiguration | null = null;
 
 let lastUpdateCharCountFunction: (() => void) | null = null;
 let observer: MutationObserver | null = null;
@@ -46,7 +48,7 @@ function callUpdatePosition() {
         buttonContainerElement,
         buttonAnchorElement,
         targetField,
-        activeConfig?.buttonPosition
+        currentActiveConfig?.buttonPosition
     );
 }
 
@@ -164,12 +166,13 @@ function cleanupFullUIAndListeners(): void {
 }
 
 function tryFindAndSetupTarget(): void {
-    if (!activeConfig) {
+    const configToUse = getActiveConfig();
+    if (!configToUse) {
         if (targetField || buttonAnchorElement) cleanupFullUIAndListeners();
         return;
     }
 
-    const { targetSelector: targetSelectorFromConfig, buttonAnchorSelector: anchorSelectorFromConfig, excludeUiIfSelectorVisible: excludeSelector } = activeConfig;
+    const { targetSelector: targetSelectorFromConfig, buttonAnchorSelector: anchorSelectorFromConfig, excludeUiIfSelectorVisible: excludeSelector } = configToUse;
 
     if (excludeSelector) {
         const excludingElement = document.querySelector(excludeSelector) as HTMLElement | null;
@@ -336,7 +339,8 @@ function wrapTextAndCalcHeight(context: CanvasRenderingContext2D, text: string, 
 }
 
 async function processImageAction(actionType: 'openInNewTab' | 'replaceInField'): Promise<void> {
-    if (!activeConfig) {
+    const configToUse = getActiveConfig();
+    if (!configToUse) {
         alert('Error: No active configuration for this page.');
         return;
     }
@@ -357,7 +361,7 @@ async function processImageAction(actionType: 'openInNewTab' | 'replaceInField')
         return;
     }
 
-    const styleConf = activeConfig.canvasStyle;
+    const styleConf = configToUse.canvasStyle;
     const CALCULATED_LINE_HEIGHT = Math.round(styleConf.fontSize * styleConf.lineHeightMultiplier);
 
     ctx.font = `${styleConf.fontSize}px ${styleConf.fontFamily}`;
@@ -455,44 +459,94 @@ async function processImageAction(actionType: 'openInNewTab' | 'replaceInField')
 }
 
 // --- Initialization ---
-function initializePlugin(): void {
+async function reinitializePluginWithNewConfig() {
+    console.log('[xLongly ContentScript] Starting reinitializePluginWithNewConfig...');
+
+    // 1. Complete cleaning of the existing UI and listeners
+    cleanupFullUIAndListeners();
+
+    // 2. Disconnection of the old MutationObserver, if it still exists
     if (observer) {
         observer.disconnect();
-        console.log('[xLongly] Old MutationObserver disconnected.');
+        observer = null;
+        console.log('[xLongly ContentScript] Old MutationObserver disconnected for reinitialization.');
     }
     buttonAnchorElement = null;
+    targetField = null;
 
-    if (!activeConfig) {
-        console.log('[xLongly] Initialisation: No active config. Plugin not active.');
-        cleanupFullUIAndListeners();
-        cleanupSiteSpecificClass(); // Using imported util
+    // 3. Load a fresh configuration (which should now include the changes from the popup)
+    currentActiveConfig = await initializeActiveConfig();
+
+    if (!currentActiveConfig) {
+        console.log('[xLongly ContentScript] Reinitialisation: No active config after update. Plugin inactive.');
+        cleanupSiteSpecificClass();
         cleanupThemeManager();
         return;
     }
 
-    console.log('[xLongly] Initialisation with selector:', activeConfig.targetSelector);
-    applySiteSpecificClass(window.location.hostname); // Using imported util
+    console.log('[xLongly ContentScript] Reinitialisation with new config. Selector:', currentActiveConfig.targetSelector);
+    console.log('[xLongly ContentScript] New canvasStyle:', currentActiveConfig.canvasStyle);
+
+    applySiteSpecificClass(window.location.hostname);
     initializeThemeManager(window.location.hostname);
 
-    tryFindAndSetupTarget();
+    // 4. Try to find the target and reconfigure the UI
+    tryFindAndSetupTarget(); // To użyje świeżego currentActiveConfig
 
+    // 5. Restart MutationObserver
     observer = new MutationObserver(() => {
+        // console.log('[xLongly ContentScript] MutationObserver triggered after reinit.');
         tryFindAndSetupTarget();
     });
 
     const targetNode = document.querySelector('#main') || document.body;
     observer.observe(targetNode, { childList: true, subtree: true });
-    console.log('[xLongly] MutationObserver started.');
+    console.log('[xLongly ContentScript] MutationObserver (re)started after reinit.');
 }
 
+console.log('[xLongly ContentScript] Attempting to register onMessage listener...');
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+    console.log('[xLongly ContentScript] Message received in listener. Type:', request.type, 'Sender ID:', sender.id, 'Sender URL:', sender.url);
+
+    if (request.type === 'XLONGLY_SETTINGS_UPDATED') {
+        console.log('[xLongly ContentScript] Received XLONGLY_SETTINGS_UPDATED from popup. Reinitializing plugin.');
+        await reinitializePluginWithNewConfig();
+        sendResponse({ status: "Settings received and plugin reinitialized by content script." });
+        return true;
+    } else if (request.type === 'XLONGLY_GET_CURRENT_SITE_INFO') {
+        const hostname = window.location.hostname;
+        let siteIdentifier = 'x.com';
+
+        if (hostname.includes('bsky.app')) {
+            siteIdentifier = 'bsky.app';
+        } else if (hostname.includes('x.com') || hostname.includes('twitter.com')) {
+            siteIdentifier = 'x.com';
+        }
+
+        console.log(`[xLongly ContentScript] Received XLONGLY_GET_CURRENT_SITE_INFO. Responding with site: ${siteIdentifier}`);
+        sendResponse({ siteIdentifier: siteIdentifier });
+        return false;
+    }
+
+    console.warn('[xLongly ContentScript] Received unhandled message type:', request.type);
+    return false;
+});
+console.log('[xLongly ContentScript] onMessage listener registered.');
+
 // --- Plugin Start ---
-if (activeConfig) {
-    initializePlugin();
-    setCurrentWatcherPath(window.location.pathname + window.location.search);
-    initializeUrlWatcher(tryFindAndSetupTarget);
-    console.log('[xLongly] Plugin loaded. Active config for target selector:', activeConfig.targetSelector);
-} else {
-    console.log('[xLongly] Plugin loaded but no config found for:', window.location.hostname, '. Plugin inactive.');
-    cleanupSiteSpecificClass(); // Using imported util
-    cleanupThemeManager();
-}
+(async () => {
+    await reinitializePluginWithNewConfig();
+
+    if (currentActiveConfig) {
+        setCurrentWatcherPath(window.location.pathname + window.location.search);
+        initializeUrlWatcher(async () => {
+            console.log("[xLongly] URL changed, re-evaluating config and UI.");
+            await reinitializePluginWithNewConfig();
+        });
+        console.log('[xLongly] Plugin loaded. Active config for target selector:', (currentActiveConfig as SiteConfiguration).targetSelector);
+    } else {
+        console.log('[xLongly] Plugin loaded but no config found for:', window.location.hostname, '. Plugin inactive.');
+        cleanupSiteSpecificClass();
+        cleanupThemeManager();
+    }
+})();
