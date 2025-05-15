@@ -1,6 +1,6 @@
 {
   "name": "xlongly",
-  "version": "1.0.0-alpha.1",
+  "version": "1.0.0-alpha.2",
   "scripts": {
     "dev": "webpack --mode development --watch",
     "build": "webpack --mode production",
