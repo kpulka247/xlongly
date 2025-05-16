@@ -74,7 +74,11 @@ const createConfig = (browser, mode) => {
                         from: `public/manifest.${browser}.json`,
                         to: 'manifest.json',
                     },
-                    { from: 'public/icons', to: 'icons', noErrorOnMissing: true },
+                    {
+                        from: 'public/icons',
+                        to: 'icons',
+                        noErrorOnMissing: true
+                    },
                     {
                         from: 'src/popup/popup.html',
                         to: 'popup.html',

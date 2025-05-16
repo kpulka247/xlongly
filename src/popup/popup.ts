@@ -1,5 +1,5 @@
 import { CanvasStyleConfig } from '../config/config-types';
-import { SiteSpecificCanvasStyles, loadUserStyles, saveUserStyles, clearUserStylesForSite } from '../utils/storage';
+import { SiteSpecificCanvasStyles, loadUserStyles, saveUserStyles } from '../utils/storage';
 
 const PRESET_BG_COLORS = ['#000000', '#FFFFFF', '#F0F0FF', '#1DA1F2', '#17BF63', '#FFAD1F'];
 const PRESET_TEXT_COLORS = ['#FFFFFF', '#000000', '#111111', '#E7E9EA', '#0F1419'];
@@ -44,7 +44,7 @@ function displayStatusMessage(message: string, type: 'success' | 'error' = 'succ
     }, 3000);
 }
 
-function populateColorOptions(container: HTMLDivElement, colors: string[], inputTarget: HTMLInputElement, type: 'bg' | 'text') {
+function populateColorOptions(container: HTMLDivElement, colors: string[], inputTarget: HTMLInputElement) {
     container.innerHTML = '';
     colors.forEach(color => {
         const box = document.createElement('div');
@@ -93,14 +93,13 @@ function loadStylesForSelectedSite() {
     if (selectedTextBox) selectedTextBox.classList.add('selected');
 }
 
-
 async function notifyContentScriptsOfUpdate(siteIdentifier: string) {
     console.log(`[xLongly Popup] Attempting to notify content scripts for site: ${siteIdentifier}`);
     try {
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
 
         for (const tab of tabs) {
-            if (tab.id && tab.url && !tab.url.startsWith('chrome-extension://')) {
+            if (tab.id && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('edge://') && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome-extension://')) {
                 const tabHostname = new URL(tab.url).hostname;
                 const isXRelated = (siteIdentifier === "x.com" || siteIdentifier === "twitter.com") && (tabHostname.includes("x.com") || tabHostname.includes("twitter.com"));
                 const isBskyRelated = siteIdentifier === "bsky.app" && tabHostname.includes("bsky.app");
@@ -112,31 +111,30 @@ async function notifyContentScriptsOfUpdate(siteIdentifier: string) {
                         if (response) {
                             console.log(`[xLongly Popup] Message acknowledged by tab ${tab.id}. Response:`, response.status);
                         } else {
-                            console.log(`[xLongly Popup] Message sent to tab ${tab.id}, but no specific response received (this is okay if content script does not call sendResponse).`);
+                            console.log(`[xLongly Popup] Message sent to tab ${tab.id}, but no specific response received (content script might not call sendResponse).`);
                         }
                     } catch (err) {
                         let errorMessage = "Unknown error during sendMessage";
-                        if (err instanceof Error) {
-                            errorMessage = err.message;
-                        } else if (typeof err === 'string') {
-                            errorMessage = err;
+                        if (err instanceof Error) errorMessage = err.message;
+                        else if (typeof err === 'string') errorMessage = err;
+
+                        if (chrome.runtime.lastError && chrome.runtime.lastError.message && !errorMessage.includes(chrome.runtime.lastError.message)) {
+                            errorMessage += ` (runtime.lastError: ${chrome.runtime.lastError.message})`;
                         }
-                        if (chrome.runtime.lastError && chrome.runtime.lastError.message) {
-                            errorMessage = chrome.runtime.lastError.message;
-                        }
-                        console.warn(`[xLongly Popup] Failed to send message to tab ${tab.id}. Error: ${errorMessage}. Content script might not be listening or tab is privileged.`);
+                        console.log(`[xLongly Popup] Could not send message to tab ${tab.id}. Error: ${errorMessage}. Content script might not be listening or tab is privileged.`);
                     }
+                } else {
+                    console.log(`[xLongly Popup] Tab ${tab.id} (${tabHostname}) does not match siteIdentifier ${siteIdentifier}. Skipping XLONGLY_SETTINGS_UPDATED.`);
                 }
+            } else {
+                console.log(`[xLongly Popup] Tab ${tab.id} has a privileged URL or no URL. Skipping XLONGLY_SETTINGS_UPDATED.`);
             }
         }
     } catch (error) {
-        let outerErrorMessage = "Unknown error in notifyContentScriptsOfUpdate";
-        if (error instanceof Error) {
-            outerErrorMessage = error.message;
-        } else if (typeof error === 'string') {
-            outerErrorMessage = error;
-        }
-        console.error("[xLongly Popup] Error in notifyContentScriptsOfUpdate:", outerErrorMessage);
+        let outerErrorMessage = "Unknown error in notifyContentScriptsOfUpdate (querying tabs)";
+        if (error instanceof Error) outerErrorMessage = error.message;
+        else if (typeof error === 'string') outerErrorMessage = error;
+        console.error("[xLongly Popup] Error querying tabs in notifyContentScriptsOfUpdate:", outerErrorMessage);
     }
 }
 
@@ -149,7 +147,10 @@ async function handleSave() {
         textColor: customTextColorInput.value,
     };
 
-    loadedUserStyles[siteToSaveFor] = { ...loadedUserStyles[siteToSaveFor], ...newStylesForSite };
+    loadedUserStyles[siteToSaveFor] = {
+        ...(loadedUserStyles[siteToSaveFor] || {}),
+        ...newStylesForSite
+    };
 
     try {
         await saveUserStyles(loadedUserStyles);
@@ -183,44 +184,52 @@ async function handleReset() {
 document.addEventListener('DOMContentLoaded', async () => {
     const elements = getElements();
 
-    populateColorOptions(elements.bgColorOptionsContainer, PRESET_BG_COLORS, elements.customBgColorInput, 'bg');
-    populateColorOptions(elements.textColorOptionsContainer, PRESET_TEXT_COLORS, elements.customTextColorInput, 'text');
+    populateColorOptions(elements.bgColorOptionsContainer, PRESET_BG_COLORS, elements.customBgColorInput);
+    populateColorOptions(elements.textColorOptionsContainer, PRESET_TEXT_COLORS, elements.customTextColorInput);
 
-    const userStylesFromStorage = await loadUserStyles();
-    if (userStylesFromStorage) {
-        loadedUserStyles = userStylesFromStorage;
+    try {
+        const userStylesFromStorage = await loadUserStyles();
+        if (userStylesFromStorage) {
+            loadedUserStyles = userStylesFromStorage;
+        }
+    } catch (e) {
+        console.error("Failed to load user styles from storage:", e);
     }
 
     // Ask the content script for the current page
     try {
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (activeTab && activeTab.id && activeTab.url && !activeTab.url.startsWith('chrome://') && !activeTab.url.startsWith('edge://') && !activeTab.url.startsWith('about:')) {
-            console.log(`[xLongly Popup] Sending XLONGLY_GET_CURRENT_SITE_INFO to tab ID: ${activeTab.id}`);
-            const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'XLONGLY_GET_CURRENT_SITE_INFO' });
-            if (response && response.siteIdentifier) {
-                console.log(`[xLongly Popup] Received site info: ${response.siteIdentifier}`);
-                // Check whether the received site identifier exists as an option in select
-                const optionExists = Array.from(elements.siteSelect.options).some(opt => opt.value === response.siteIdentifier);
-                if (optionExists) {
-                    elements.siteSelect.value = response.siteIdentifier;
-                    currentSelectedSite = response.siteIdentifier; // Update the global variable
+        if (activeTab && activeTab.id && activeTab.url &&
+            !activeTab.url.startsWith('chrome://') &&
+            !activeTab.url.startsWith('edge://') &&
+            !activeTab.url.startsWith('about:') &&
+            !activeTab.url.startsWith('chrome-extension://')
+        ) {
+            console.log(`[xLongly Popup] Attempting to get site info from tab ID: ${activeTab.id}`);
+            try {
+                const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'XLONGLY_GET_CURRENT_SITE_INFO' });
+                if (response && response.siteIdentifier) {
+                    console.log(`[xLongly Popup] Received site info: ${response.siteIdentifier}`);
+                    const optionExists = Array.from(elements.siteSelect.options).some(opt => opt.value === response.siteIdentifier);
+                    if (optionExists) {
+                        elements.siteSelect.value = response.siteIdentifier;
+                    } else {
+                        console.log(`[xLongly Popup] Received siteIdentifier '${response.siteIdentifier}' not found in select options. Using default.`);
+                    }
                 } else {
-                    console.warn(`[xLongly Popup] Received siteIdentifier '${response.siteIdentifier}' not found in select options. Using default.`);
-                    currentSelectedSite = elements.siteSelect.value; // Use the default value from select
+                    console.log('[xLongly Popup] No siteIdentifier in response from content script. Using default selected site.');
                 }
-            } else {
-                console.warn('[xLongly Popup] No response or siteIdentifier from content script. Using default selected site.');
-                currentSelectedSite = elements.siteSelect.value; // Use the default value from select
+            } catch (e) {
+                console.log(`[xLongly Popup] Could not communicate with content script on tab ${activeTab.id} (likely no content script injected or tab privileged): ${e instanceof Error ? e.message : e}`);
             }
         } else {
-            console.warn('[xLongly Popup] Could not get active tab ID or URL is privileged. Using default selected site.');
-            currentSelectedSite = elements.siteSelect.value; // Use the default value from select
+            console.log('[xLongly Popup] Active tab is not suitable for content script communication (e.g., privileged URL, no ID). Using default selected site.');
         }
     } catch (error) {
-        console.warn('[xLongly Popup] Error communicating with content script or no content script on active tab:', error);
-        currentSelectedSite = elements.siteSelect.value; // Use the default value from select in case of error
+        console.error("[xLongly Popup] Error querying active tab:", error);
     }
 
+    currentSelectedSite = elements.siteSelect.value;
     loadStylesForSelectedSite();
 
     elements.siteSelect.addEventListener('change', (event) => {
