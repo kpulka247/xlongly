@@ -15,7 +15,8 @@ const createConfig = (browser, mode) => {
         devtool: isDevelopment ? 'inline-source-map' : false,
         entry: {
             'content-script': './src/content-script.ts',
-            'popup': './src/popup/popup.ts',
+            popup: './src/popup/popup.ts',
+            background: './src/background.ts',
         },
         output: {
             path: browserOutputDir,
