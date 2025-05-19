@@ -5,7 +5,6 @@
     "description": "Converts written posts on X and Bluesky that exceed the character limit into images with text.",
     "permissions": [
         "storage",
-        "tabs",
         "notifications"
     ],
     "background": {

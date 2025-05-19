@@ -1,13 +1,19 @@
 import { initializeActiveConfig, getActiveConfig } from './config/active-config';
 import type { SiteConfiguration } from './config/config-types';
 import { initializeThemeManager, cleanupThemeManager } from './utils/theme';
-import { iconShowImage, iconConvertToImage, iconCopy } from './constants/icons';
+import { iconShowImage, iconConvertToImage, iconCopy, iconFloppyDisk, iconArrowRight } from './constants/icons';
 import { isElementVisible } from './utils/dom';
 import { dataURLtoBlob } from './utils/image';
 import { applySiteSpecificClass, cleanupSiteSpecificClass } from './utils/site-styling';
-import { initializeUrlWatcher, getCurrentWatcherPath, setCurrentWatcherPath } from './utils/url-watcher';
+import { initializeUrlWatcher, setCurrentWatcherPath } from './utils/url-watcher';
 import { showActionNotification as showUiNotification } from './ui/notifications';
-import { updateButtonContainerPosition as updateUiButtonContainerPosition } from './ui/positioning';
+import { updateButtonContainerPosition } from './ui/positioning';
+import {
+    saveTextPreset as storageSaveTextPreset,
+    MAX_PRESETS as STORAGE_MAX_PRESETS,
+    loadTextPreset as storageLoadTextPreset,
+    loadAllTextPresets as storageLoadAllTextPresets,
+} from './utils/preset-storage';
 
 // --- Global State Variables ---
 let buttonAnchorElement: HTMLElement | null = null;
@@ -18,6 +24,9 @@ let generateOpenButtonElement: HTMLButtonElement | null = null;
 let generateReplaceButtonElement: HTMLButtonElement | null = null;
 let actionNotificationElement: HTMLDivElement | null = null;
 let currentActiveConfig: SiteConfiguration | null = null;
+let savePresetButtonElement: HTMLButtonElement | null = null;
+let presetSlotButtonsContainer: HTMLDivElement | null = null;
+let isPresetSlotSelectorVisible: boolean = false;
 
 let lastUpdateCharCountFunction: (() => void) | null = null;
 let observer: MutationObserver | null = null;
@@ -44,12 +53,138 @@ interface WrapTextResult {
 
 // --- Core UI Functions (kept in main file due to heavy global state usage) ---
 function callUpdatePosition() {
-    updateUiButtonContainerPosition(
+    updateButtonContainerPosition(
         buttonContainerElement,
         buttonAnchorElement,
         targetField,
         currentActiveConfig?.buttonPosition
     );
+}
+
+function createPresetSlotButton(slotNumber: number, hasContent: boolean): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.className = 'action-button preset-slot-button';
+    button.textContent = `${slotNumber}`;
+    if (hasContent) {
+        button.classList.add('has-content');
+        button.title = `Load/Overwrite preset ${slotNumber} (saved)`;
+    } else {
+        button.title = `Save preset ${slotNumber} (empty)`;
+    }
+
+    button.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const currentTextInField = targetField?.isContentEditable
+            ? (targetField.innerText || '')
+            : ((targetField as HTMLInputElement | HTMLTextAreaElement)?.value || '');
+
+        if (currentTextInField.trim() !== "") {
+            await handleSaveToPreset(slotNumber, button);
+        } else {
+            const presetText = await storageLoadTextPreset(slotNumber);
+            if (presetText) {
+                handleLoadFromPreset(presetText);
+            } else {
+                showUiNotification(actionNotificationElement, `Preset ${slotNumber} is empty. Enter the text to save it.`, 'warning');
+            }
+        }
+    });
+    return button;
+}
+async function handleSaveToPreset(slotNumber: number, slotButtonElement: HTMLButtonElement) {
+    if (!targetField) {
+        showUiNotification(actionNotificationElement, 'Text field not found.', 'warning');
+        return;
+    }
+    const textToSave = targetField.isContentEditable ? (targetField.innerText || '') : ((targetField as HTMLInputElement | HTMLTextAreaElement).value || '');
+
+    if (textToSave.trim() === "") {
+        showUiNotification(actionNotificationElement, 'Blank text cannot be saved to a preset.', 'warning');
+        return;
+    }
+
+    try {
+        await storageSaveTextPreset(slotNumber, textToSave);
+        showUiNotification(actionNotificationElement, `Text saved in preset ${slotNumber}.`, 'success');
+        slotButtonElement.classList.add('has-content');
+        slotButtonElement.title = `Load/Overwrite preset ${slotNumber} (saved)`;
+        deleteContentNatively(targetField);
+        togglePresetSlotSelectorUI(false);
+    } catch (error) {
+        console.error(`[xLongly] Error when saving a preset to slot ${slotNumber}:`, error);
+        showUiNotification(actionNotificationElement, 'Error when saving a preset.', 'warning');
+    }
+}
+
+function handleLoadFromPreset(textToLoad: string) {
+    if (!targetField) {
+        showUiNotification(actionNotificationElement, 'Text field not found.', 'warning');
+        return;
+    }
+
+    if (targetField.isContentEditable) {
+        targetField.innerText = textToLoad;
+    } else if (targetField.tagName === 'TEXTAREA' || targetField.tagName === 'INPUT') {
+        (targetField as HTMLInputElement | HTMLTextAreaElement).value = textToLoad;
+    }
+
+    targetField.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+    targetField.focus?.();
+    showUiNotification(actionNotificationElement, 'Text from preset loaded.', 'success');
+    togglePresetSlotSelectorUI(false);
+}
+
+async function togglePresetSlotSelectorUI(forceState?: boolean) {
+    const shouldBeVisible = forceState !== undefined ? forceState : !isPresetSlotSelectorVisible;
+
+    if (savePresetButtonElement) {
+        savePresetButtonElement.innerHTML = shouldBeVisible ? iconArrowRight : iconFloppyDisk;
+        savePresetButtonElement.title = shouldBeVisible ? 'Hide presets' : 'Save to preset / Load preset';
+    }
+
+    if (shouldBeVisible) {
+        if (!presetSlotButtonsContainer) {
+            presetSlotButtonsContainer = document.createElement('div');
+            presetSlotButtonsContainer.id = 'preset-slot-buttons-container';
+
+            const loadedPresets = await storageLoadAllTextPresets();
+
+            for (let i = 1; i <= STORAGE_MAX_PRESETS; i++) {
+                const presetKey = `preset_${i}` as keyof typeof loadedPresets;
+                const hasContent = !!loadedPresets[presetKey];
+                const slotButton = createPresetSlotButton(i, hasContent);
+                presetSlotButtonsContainer.appendChild(slotButton);
+            }
+        } else {
+            const loadedPresets = await storageLoadAllTextPresets();
+            const slotButtons = presetSlotButtonsContainer.querySelectorAll<HTMLButtonElement>('.preset-slot-button');
+            slotButtons.forEach((button, index) => {
+                const slotNumber = index + 1;
+                const presetKey = `preset_${slotNumber}` as keyof typeof loadedPresets;
+                const hasContent = !!loadedPresets[presetKey];
+                if (hasContent) {
+                    button.classList.add('has-content');
+                    button.title = `Load/Overwrite preset ${slotNumber} (saved)`;
+                } else {
+                    button.classList.remove('has-content');
+                    button.title = `Save preset ${slotNumber} (empty)`;
+                }
+            });
+        }
+
+        if (buttonContainerElement && savePresetButtonElement && !buttonContainerElement.contains(presetSlotButtonsContainer)) {
+            buttonContainerElement.insertBefore(presetSlotButtonsContainer, savePresetButtonElement);
+        }
+
+        presetSlotButtonsContainer.classList.add('active');
+        isPresetSlotSelectorVisible = true;
+    } else {
+        if (presetSlotButtonsContainer) {
+            presetSlotButtonsContainer.classList.remove('active');
+        }
+        isPresetSlotSelectorVisible = false;
+    }
+    callUpdatePosition();
 }
 
 function setupUIForTarget(textInputElement: TargetElementType): void {
@@ -85,6 +220,16 @@ function setupUIForTarget(textInputElement: TargetElementType): void {
     targetField.addEventListener('input', updateCharCount);
     updateCharCount();
 
+    savePresetButtonElement = document.createElement('button');
+    savePresetButtonElement.className = 'action-button';
+    savePresetButtonElement.title = 'Save text to preset';
+    savePresetButtonElement.innerHTML = iconFloppyDisk;
+    buttonContainerElement.appendChild(savePresetButtonElement);
+    savePresetButtonElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePresetSlotSelectorUI();
+    });
+
     generateOpenButtonElement = document.createElement('button');
     generateOpenButtonElement.className = 'action-button';
     generateOpenButtonElement.title = 'Show image';
@@ -110,12 +255,25 @@ function setupUIForTarget(textInputElement: TargetElementType): void {
     document.body.appendChild(actionNotificationElement);
 
     callUpdatePosition();
+    const INITIAL_POSITION_DELAY_MS = 100;
+    setTimeout(() => {
+        if (buttonContainerElement && (buttonAnchorElement || targetField)) {
+            callUpdatePosition();
+        }
+    }, INITIAL_POSITION_DELAY_MS);
 
-    // Remove previous handlers if they exist
+    if (presetSlotButtonsContainer && presetSlotButtonsContainer.classList.contains('active')) {
+        presetSlotButtonsContainer.classList.remove('active');
+    }
+    if (savePresetButtonElement) {
+        savePresetButtonElement.innerHTML = iconFloppyDisk;
+        savePresetButtonElement.title = 'Save to preset / Load preset';
+    }
+    isPresetSlotSelectorVisible = false;
+
     if (currentResizeHandler) window.removeEventListener('resize', currentResizeHandler);
     if (currentScrollHandler) window.removeEventListener('scroll', currentScrollHandler, true);
 
-    // Create new handlers that capture the current state for callUpdatePosition
     currentResizeHandler = callUpdatePosition;
     currentScrollHandler = callUpdatePosition;
 
@@ -123,7 +281,7 @@ function setupUIForTarget(textInputElement: TargetElementType): void {
     window.addEventListener('scroll', currentScrollHandler, true);
 
     if (resizeObserver) resizeObserver.disconnect();
-    resizeObserver = new ResizeObserver(callUpdatePosition); // Pass the wrapper
+    resizeObserver = new ResizeObserver(callUpdatePosition);
     if (anchorElement) {
         resizeObserver.observe(anchorElement as Element);
     }
@@ -131,9 +289,20 @@ function setupUIForTarget(textInputElement: TargetElementType): void {
 
 function cleanupExistingUIElements(): void {
     charCounterElement?.remove();
-    buttonContainerElement?.remove();
+
+    generateOpenButtonElement?.remove();
+    generateReplaceButtonElement?.remove();
+    savePresetButtonElement?.remove();
+    presetSlotButtonsContainer?.remove();
+
+    if (buttonContainerElement) buttonContainerElement.remove();
     actionNotificationElement?.remove();
+
     charCounterElement = buttonContainerElement = generateOpenButtonElement = generateReplaceButtonElement = actionNotificationElement = null;
+    savePresetButtonElement = null;
+    presetSlotButtonsContainer?.remove();
+    presetSlotButtonsContainer = null;
+    isPresetSlotSelectorVisible = false;
 }
 
 function cleanupFullUIAndListeners(): void {

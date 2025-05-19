@@ -15,6 +15,7 @@
     display: flex;
     gap: 10px;
     z-index: 0;
+    overflow: hidden;
 }
 
 .action-button {
@@ -101,4 +102,24 @@ body.theme-dark .action-button:active {
 #action-notification.notification-warning {
     background-color: rgb(255, 212, 0);
     color: rgb(15, 20, 25);
+}
+
+#preset-slot-buttons-container {
+    display: flex;
+    gap: 5px;
+    visibility: hidden;
+}
+
+#preset-slot-buttons-container.active {
+    visibility: visible;
+}
+
+.preset-slot-button {
+    min-width: 28px;
+    padding: 4px 6px;
+    font-weight: bold;
+}
+
+.preset-slot-button.has-content {
+    background-color: #4a4a4a;
 }

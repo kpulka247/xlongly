@@ -1,5 +1,12 @@
 import { CanvasStyleConfig } from '../config/config-types';
 import { SiteSpecificCanvasStyles, loadUserStyles, saveUserStyles } from '../utils/storage';
+import {
+    loadAllTextPresets as storageLoadAllTextPresets,
+    deleteTextPreset as storageDeleteTextPreset,
+    loadTextPreset as storageLoadSingleTextPreset,
+    MAX_PRESETS as STORAGE_MAX_PRESETS_POPUP
+} from '../utils/preset-storage';
+import { iconTrash } from '../constants/icons'
 
 const PRESET_BG_COLORS = ['#000000', '#FFFFFF', '#F0F0FF', '#1DA1F2', '#17BF63', '#FFAD1F'];
 const PRESET_TEXT_COLORS = ['#FFFFFF', '#000000', '#111111', '#E7E9EA', '#0F1419'];
@@ -13,6 +20,12 @@ interface Elements {
     saveButton: HTMLButtonElement;
     resetButton: HTMLButtonElement;
     statusMessage: HTMLParagraphElement;
+    presetsMinimalContainer: HTMLDivElement;
+    presetModalOverlay: HTMLDivElement;
+    presetModalContent: HTMLDivElement;
+    presetModalCloseButton: HTMLButtonElement;
+    presetModalTitle: HTMLHeadingElement;
+    presetModalTextArea: HTMLDivElement;
 }
 
 let currentSelectedSite: string = 'x.com'; // Default
@@ -31,7 +44,116 @@ function getElements(): Elements {
         saveButton: document.getElementById('save-button') as HTMLButtonElement,
         resetButton: document.getElementById('reset-button') as HTMLButtonElement,
         statusMessage: document.getElementById('status-message') as HTMLParagraphElement,
+        presetsMinimalContainer: document.getElementById('text-presets-minimal-list') as HTMLDivElement,
+        presetModalOverlay: document.getElementById('preset-modal-overlay') as HTMLDivElement,
+        presetModalContent: document.getElementById('preset-modal-content') as HTMLDivElement,
+        presetModalCloseButton: document.getElementById('preset-modal-close-button') as HTMLButtonElement,
+        presetModalTitle: document.getElementById('preset-modal-title') as HTMLHeadingElement,
+        presetModalTextArea: document.getElementById('preset-modal-text-area') as HTMLDivElement,
     };
+}
+
+async function showPresetModal(slotNumber: number) {
+    const { presetModalOverlay, presetModalTitle, presetModalTextArea } = getElements();
+    if (!presetModalOverlay || !presetModalTitle || !presetModalTextArea) return;
+
+    const presetText = await storageLoadSingleTextPreset(slotNumber);
+
+    if (presetText) {
+        presetModalTitle.textContent = `Preset ${slotNumber} Content`;
+        presetModalTextArea.textContent = presetText;
+        presetModalOverlay.classList.remove('hidden');
+    } else {
+        displayStatusMessage(`Preset ${slotNumber} is empty.`, 'error');
+    }
+}
+
+function hidePresetModal() {
+    const { presetModalOverlay, presetModalTextArea } = getElements();
+    if (!presetModalOverlay || !presetModalTextArea) return;
+    presetModalOverlay.classList.add('hidden');
+    presetModalTextArea.textContent = '';
+}
+
+async function renderMinimalTextPresets() {
+    const { presetsMinimalContainer } = getElements();
+    if (!presetsMinimalContainer) return;
+
+    presetsMinimalContainer.innerHTML = '';
+
+    try {
+        const presets = await storageLoadAllTextPresets();
+
+        for (let i = 1; i <= STORAGE_MAX_PRESETS_POPUP; i++) {
+            const presetKey = `preset_${i}` as keyof typeof presets;
+            const presetTextContent = presets[presetKey];
+            const isSlotUsed = !!presetTextContent;
+
+            const presetButtonWrapper = document.createElement('div');
+            presetButtonWrapper.className = 'preset-minimal-button-wrapper';
+
+            const presetButton = document.createElement('button');
+            presetButton.className = 'preset-minimal-button';
+            presetButton.textContent = `${i}`;
+            presetButton.dataset.slot = `${i}`;
+
+            if (!isSlotUsed) {
+                presetButton.classList.add('disabled');
+                presetButton.title = `Preset ${i} (Empty)`;
+            } else {
+                presetButton.title = `Preset ${i} (Click to view content)`;
+            }
+
+            const deleteIcon = document.createElement('span');
+            deleteIcon.className = 'preset-delete-icon';
+            deleteIcon.innerHTML = iconTrash;
+            deleteIcon.title = `Delete Preset ${i}`;
+            deleteIcon.style.display = 'none';
+
+            presetButtonWrapper.addEventListener('mouseenter', () => {
+                if (isSlotUsed) {
+                    deleteIcon.style.display = 'inline-block';
+                }
+            });
+
+            presetButtonWrapper.addEventListener('mouseleave', () => {
+                deleteIcon.style.display = 'none';
+            });
+
+            presetButton.addEventListener('click', () => {
+                if (isSlotUsed) {
+                    showPresetModal(i);
+                } else {
+                    displayStatusMessage(`Preset ${i} is empty. Save something first!`, 'error');
+                }
+            });
+
+            deleteIcon.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (confirm(`Are you sure you want to delete preset ${i}?`)) {
+                    await handleDeletePreset(i);
+                }
+            });
+
+            presetButtonWrapper.appendChild(presetButton);
+            if (isSlotUsed) presetButtonWrapper.appendChild(deleteIcon);
+            presetsMinimalContainer.appendChild(presetButtonWrapper);
+        }
+    } catch (error) {
+        console.error('[xLongly Popup] Error rendering minimal text presets:', error);
+        presetsMinimalContainer.innerHTML = '<p class="error-presets">Error loading presets.</p>';
+    }
+}
+
+async function handleDeletePreset(slotNumber: number) {
+    try {
+        await storageDeleteTextPreset(slotNumber);
+        displayStatusMessage(`Preset ${slotNumber} deleted.`, 'success');
+        await renderMinimalTextPresets();
+    } catch (error) {
+        displayStatusMessage(`Error deleting preset ${slotNumber}.`, 'error');
+        console.error(`[xLongly Popup] Error deleting preset ${slotNumber}:`, error);
+    }
 }
 
 function displayStatusMessage(message: string, type: 'success' | 'error' = 'success') {
@@ -246,4 +368,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     elements.customTextColorInput.addEventListener('input', () => {
         elements.textColorOptionsContainer.querySelectorAll('.color-box.selected').forEach(b => b.classList.remove('selected'));
     });
+
+    if (elements.presetModalCloseButton) {
+        elements.presetModalCloseButton.addEventListener('click', hidePresetModal);
+    }
+
+    if (elements.presetModalOverlay) {
+        elements.presetModalOverlay.addEventListener('click', (event) => {
+            if (event.target === elements.presetModalOverlay) {
+                hidePresetModal();
+            }
+        });
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && elements.presetModalOverlay && !elements.presetModalOverlay.classList.contains('hidden')) {
+            hidePresetModal();
+        }
+    });
+
+    await renderMinimalTextPresets();
 });
